@@ -25,6 +25,11 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.ToggleButton;
 
+import android.os.Build;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+
+
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -32,8 +37,6 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.util.Date;
 
-import butterknife.BindView;
-import butterknife.ButterKnife;
 import gis2018.udacity.tametu.utils.Utils;
 
 import static gis2018.udacity.tametu.utils.CheckMarkUtils.updateCheckMarkCount;
@@ -66,14 +69,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     BroadcastReceiver countDownReceiver;
     BroadcastReceiver completedBroadcastReceiver;
     BroadcastReceiver startBroadcastReceiver;
-    @BindView(R.id.settings_imageview_main)
+
     ImageView settingsImageView;
-    @BindView(R.id.timer_button_main)
     ToggleButton timerButton;
-    @BindView(R.id.countdown_textview_main)
     TextView countDownTextView;
-    @BindView(R.id.finish_imageview_main)
-    ImageView finishImageView; // (Complete Button)
+    ImageView finishImageView;
+    EditText message; // (Complete Button)
     private long workDuration; // Time Period for Pomodoro (Work-Session)
     private String workDurationString; // Time Period for Pomodoro in String
     private long shortBreakDuration; // Time Period for Short-Break
@@ -84,17 +85,22 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private AlertDialog alertDialog;
     private boolean isAppVisible = true;
     private String currentCountDown; // Current duration for Work-Session, Short-Break or Long-Break
-    @BindView(R.id.current_task_name_textview_main)
-    EditText message;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // 手动 findViewById 替换 ButterKnife
+        settingsImageView = findViewById(R.id.settings_imageview_main);
+        timerButton = findViewById(R.id.timer_button_main);
+        countDownTextView = findViewById(R.id.countdown_textview_main);
+        finishImageView = findViewById(R.id.finish_imageview_main);
+        message = findViewById(R.id.current_task_name_textview_main);
+
         isAppVisible = true;
         preferences = PreferenceManager.getDefaultSharedPreferences(this);
 
-        ButterKnife.bind(this);
         setOnClickListeners();
 
         determineViewState(isServiceRunning(CountDownTimerService.class));
@@ -518,14 +524,29 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      * @return notification.
      */
     private NotificationCompat.Builder createTaskInformationNotification() {
-        Intent notificationIntent = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, 0);
-        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_notification)
-                .setContentIntent(pendingIntent)
-                .setAutoCancel(true)
-                .setColor(getResources().getColor(R.color.colorPrimary))
-                .setUsesChronometer(true); //timer that counts-up. Displays time in-between two sessions
+
+        // Android 8.0+ 必须创建 channel
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel =
+                    new NotificationChannel(CHANNEL_ID, "Pomodoro Timer",
+                            NotificationManager.IMPORTANCE_DEFAULT);
+            getSystemService(NotificationManager.class).createNotificationChannel(channel);
+        }
+
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                new Intent(this, MainActivity.class),
+                PendingIntent.FLAG_IMMUTABLE   // 修复 Android 12+
+        );
+
+        NotificationCompat.Builder notificationBuilder =
+                new NotificationCompat.Builder(this, CHANNEL_ID)
+                        .setSmallIcon(R.drawable.ic_notification)
+                        .setContentIntent(pendingIntent)
+                        .setAutoCancel(true)
+                        .setColor(getColor(R.color.colorPrimary))
+                        .setUsesChronometer(true);
 
         switch (currentlyRunningServiceType) {
             case TAMETU:
@@ -548,11 +569,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         .setContentTitle(getString(R.string.tametu_completion_alert_message))
                         .setContentText(getString(R.string.session_over_notification_content_text));
                 break;
-            default:
         }
 
         return notificationBuilder;
     }
+
 
     /**
      * Displays a notification when foreground service is finished.

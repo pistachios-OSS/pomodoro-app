@@ -63,26 +63,40 @@ public class CountDownTimerService extends Service {
         long TIME_INTERVAL = intent.getLongExtra("time_interval", 0);
         currentlyRunningServiceType = Utils.retrieveCurrentlyRunningServiceType(preferences, this);
 
+        // ============= 修复 PendingIntent：必须指定 FLAG_IMMUTABLE ============
         Intent notificationIntent = new Intent(this, MainActivity.class);
-        PendingIntent pendingIntent = PendingIntent.getActivity(this,
-                0, notificationIntent, 0);
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                notificationIntent,
+                PendingIntent.FLAG_IMMUTABLE
+        );
 
-        //For "Complete" button - Intent and PendingIntent
+        // "Complete" 按钮
         Intent completeIntent = new Intent(this, StopTimerActionReceiver.class)
                 .putExtra(INTENT_NAME_ACTION, INTENT_VALUE_COMPLETE);
-        PendingIntent completeActionPendingIntent = PendingIntent.getBroadcast(this,
-                1, completeIntent, PendingIntent.FLAG_UPDATE_CURRENT);
 
-        //For "Cancel" button - Intent and PendingIntent
+        PendingIntent completeActionPendingIntent = PendingIntent.getBroadcast(
+                this,
+                1,
+                completeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        // "Cancel" 按钮
         Intent cancelIntent = new Intent(this, StopTimerActionReceiver.class)
                 .putExtra(INTENT_NAME_ACTION, INTENT_VALUE_CANCEL);
-        PendingIntent cancelActionPendingIntent = PendingIntent.getBroadcast(this,
-                0, cancelIntent, 0);
 
-        Notification.Builder notificationBuilder = null;
+        PendingIntent cancelActionPendingIntent = PendingIntent.getBroadcast(
+                this,
+                0,
+                cancelIntent,
+                PendingIntent.FLAG_IMMUTABLE
+        );
+
+        Notification.Builder notificationBuilder;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             notificationBuilder = new Notification.Builder(this, CHANNEL_ID);
-
         } else {
             notificationBuilder = new Notification.Builder(this);
         }
@@ -99,15 +113,11 @@ public class CountDownTimerService extends Service {
                     .setChronometerCountDown(true);
         }
 
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             notificationBuilder = notificationBuilder
                     .setColor(getResources().getColor(R.color.colorPrimary));
-
         }
 
-        //adding separate cases for both service types to ensure the order of the action
-        //buttons is preserved in the notification
         switch (currentlyRunningServiceType) {
             case 0:
                 notificationBuilder
@@ -125,16 +135,15 @@ public class CountDownTimerService extends Service {
                 break;
         }
 
-        Notification notification = notificationBuilder
-                .build();
+        Notification notification = notificationBuilder.build();
 
-        // Clearing any previous notifications.
         NotificationManagerCompat
                 .from(this)
                 .cancel(TASK_INFORMATION_NOTIFICATION_ID);
 
         startForeground(ID, notification);
         countDownTimerBuilder(TIME_PERIOD, TIME_INTERVAL).start();
+
         return START_REDELIVER_INTENT;
     }
 
@@ -150,9 +159,6 @@ public class CountDownTimerService extends Service {
         return contentText;
     }
 
-    /**
-     * @return a CountDownTimer which ticks every 1 second for given Time period.
-     */
     private CountDownTimer countDownTimerBuilder(long TIME_PERIOD, long TIME_INTERVAL) {
         currentlyRunningServiceType = Utils.retrieveCurrentlyRunningServiceType(preferences, getApplicationContext());
         countDownTimer = new CountDownTimer(TIME_PERIOD, TIME_INTERVAL) {
@@ -172,24 +178,21 @@ public class CountDownTimerService extends Service {
 
             @Override
             public void onFinish() {
-                // Updates and Retrieves new value of WorkSessionCount.
                 if (currentlyRunningServiceType == TAMETU) {
                     newWorkSessionCount = Utils.updateWorkSessionCount(preferences, getApplicationContext());
-                    // Getting type of break user should take, and updating type of currently running service
                     currentlyRunningServiceType = Utils.getTypeOfBreak(preferences, getApplicationContext());
                 } else {
-                    // If last value of currentlyRunningServiceType was SHORT_BREAK or LONG_BREAK then set it back to POMODORO
                     currentlyRunningServiceType = TAMETU;
                 }
 
                 newWorkSessionCount = preferences.getInt(getString(R.string.work_session_count_key), 0);
-                // Updating value of currentlyRunningServiceType in SharedPreferences.
                 Utils.updateCurrentlyRunningServiceType(preferences, getApplicationContext(), currentlyRunningServiceType);
-                //Ring once ticking ends.
+
                 soundPool.play(ringID,
                         floatRingingVolumeLevel,
                         floatRingingVolumeLevel,
                         2, 0, 1f);
+
                 stopSelf();
                 stoppedBroadcastIntent();
             }
@@ -197,7 +200,6 @@ public class CountDownTimerService extends Service {
         return countDownTimer;
     }
 
-    // Broadcasts intent that the timer has stopped.
     protected void stoppedBroadcastIntent() {
         broadcaster.sendBroadcast(
                 new Intent(STOP_ACTION_BROADCAST)
